@@ -6,3 +6,6 @@ __pycache__/
 data/
 # reviewer_key 솔트
 .salt
+
+# 수집 도구도 공개하지 않는다 (README 5절)
+collect/
