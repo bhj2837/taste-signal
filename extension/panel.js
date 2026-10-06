@@ -69,7 +69,7 @@
       if (s.overall.hold) {
         const k = moreNeeded(s.overall, loaded);
         lines.push(`판단 보류: 쓸 수 있는 후기 ${s.overall.n}건(15건 필요).`);
-        if (k && shop.hasNext) lines.push(`후기를 약 ${k}건 더 펼치면 계산합니다.`);
+        if (k && shop.hasNext) lines.push(`후기 목록을 아래로 내려 약 ${k}건 더 불러오면 계산합니다.`);
       } else {
         lines.push(`전체 편차 ${fmt(s.overall.value)}  (${ci(s.overall)}, ${s.overall.n}건)`);
         lines.push("리뷰어가 평소 주는 별점보다 이 가게에 얼마나 더 주었나. 맛만의 점수가 아니다.");
