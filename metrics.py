@@ -5,8 +5,11 @@
 
 출력은 셋이다.
   R_hat  동네 중앙값 쪽으로 수축시킨 보정 평점
-  lower  그 평점의 95% 신뢰구간 하한. 순위는 이걸로 매긴다
-  delta  경험 있는 리뷰어들이 자기 평소 평균보다 몇 점 더 줬는가
+  lower  그 평점의 95% 신뢰구간 하한. 표본이 빈약한 가게를 떨어뜨리는 바닥 필터로만 쓴다
+  delta  경험 있는 리뷰어들이 자기 평소 평균보다 몇 점 더 줬는가. 정렬은 이걸로 한다
+
+하한으로 순위를 매기려 했으나 상위 다섯 곳의 하한이 같은 값으로 뭉쳐 변별력이 없었다.
+근거는 METHOD.md 「실패한 것」.
 """
 
 from collections import defaultdict
@@ -100,5 +103,6 @@ def analyze(rows):
     peer_median = median(weighted)
 
     out = [summarize(rows_, peer_median) for rows_ in by_shop.values()]
-    out.sort(key=lambda d: d["lower"], reverse=True)
+    # 편차가 없는 가게(후기 5개 이상 리뷰어가 없음)는 맨 뒤로
+    out.sort(key=lambda d: (d["delta"] is not None, d["delta"] or 0), reverse=True)
     return peer_median, out

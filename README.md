@@ -44,7 +44,12 @@
 ```
 python3 build_dataset.py
 python3 report.py
+python3 validate.py
+python3 -m unittest
 ```
+
+validate.py 는 정답 레이블 없이 잴 수 있는 세 가지를 출력한다. 편차의 부트스트랩 구간,
+반분 신뢰도, 가짜 리뷰 몇 개면 지표가 0.1 움직이는지. 난수 시드가 고정되어 있다.
 
 ## 데이터
 
