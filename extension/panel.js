@@ -42,6 +42,13 @@
   const fmt = (x) => (x > 0 ? "+" : "") + x.toFixed(2);
   const ci = (s) => `95% 구간 ${fmt(s.ci[0])} ~ ${fmt(s.ci[1])}`;
 
+  // 구간이 0 을 걸치면 점추정이 양수든 음수든 평소와 다르다고 말할 수 없다
+  function reading(st) {
+    if (st.ci[0] > 0) return "평소보다 뚜렷이 후하게 받았다.";
+    if (st.ci[1] < 0) return "평소보다 뚜렷이 박하게 받았다.";
+    return "구간이 0을 걸쳐 있어 평소와 다르다고 말할 수 없다.";
+  }
+
   function moreNeeded(s, loaded) {
     // 지금까지 펼친 후기에서 쓸 수 있는 비율로, 판단 보류를 넘으려면 몇 건이 더 필요한지 어림한다
     const rate = s.n / Math.max(loaded, 1);
@@ -72,6 +79,7 @@
         if (k && shop.hasNext) lines.push(`후기 목록을 아래로 내려 약 ${k}건 더 불러오면 계산합니다.`);
       } else {
         lines.push(`전체 편차 ${fmt(s.overall.value)}  (${ci(s.overall)}, ${s.overall.n}건)`);
+        lines.push(reading(s.overall));
         lines.push("리뷰어가 평소 주는 별점보다 이 가게에 얼마나 더 주었나. 맛만의 점수가 아니다.");
         if (s.showTaste) {
           lines.push(`참고: 맛을 말한 후기만 ${fmt(s.taste.value)}  (${ci(s.taste)}, ${s.taste.n}건)`);
