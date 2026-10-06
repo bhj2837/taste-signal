@@ -1,0 +1,193 @@
+// 확장의 계산 핵심. DOM 을 쓰지 않는 순수 함수만 둔다.
+// Python 쪽과 같은 값을 내야 한다: normalize.py(편차), label_rules.py v2(분류), score.py(맛 편차), eval_rules.py(C).
+// 대조는 extension/parity.mjs.
+
+import { RULES } from "./rules_v2.js";
+
+export const MIN_COUNT = 5; // 편차를 쓰는 리뷰어 후기 수 하한
+export const CEILING = 4.8; // 이 후기를 뺀 본인 평균이 이 이상이면 뺀다
+export const MIN_N = 15; // 판단 보류 기준
+export const BOOT = 2000;
+const ASPECTS = ["taste", "service", "wait", "price", "other"];
+const NON_TASTE = ["service", "wait", "price", "other"];
+
+// 카카오맵 후기 응답(reviews 배열의 원소)을 계산에 쓰는 형태로. 수집기의 화이트리스트와 같은 필드만 읽는다.
+export function fromApi(r) {
+  const owner = (r.meta && r.meta.owner) || {};
+  return {
+    review_id: r.review_id,
+    star: r.star_rating,
+    text: r.contents || "",
+    registered_at: r.registered_at,
+    updated_at: r.updated_at,
+    rc: owner.review_count,
+    avg: owner.average_score,
+  };
+}
+
+// Python round(x, 4) 와 같은 값. 저장된 이진수의 정확한 값으로 반올림하고, 정확히 반이면 짝수 쪽으로 간다.
+// Math.round(x * 1e4) 는 곱셈에서 오차가 생기고 반을 늘 올려서 수십 건이 0.0001 씩 달랐다.
+export function round4(x) {
+  const [, f] = Math.abs(x).toFixed(100).split(".");
+  const tie = f[4] === "5" && /^0*$/.test(f.slice(5));
+  if (!tie) return Number(x.toFixed(4));
+  let t = Math.trunc(Math.abs(x) * 1e4);
+  if (t % 2) t += 1;
+  return (Math.sign(x) * t) / 1e4;
+}
+
+// normalize.derive 와 같다. others 는 이 후기를 뺀 본인 평균, delta 는 별점과의 차이(-4 에서 +4).
+export function derive(r) {
+  const { rc, avg, star } = r;
+  const others = rc && rc >= 2 && avg != null ? (avg * rc - star) / (rc - 1) : null;
+  let delta = null;
+  if (others != null && rc >= MIN_COUNT) delta = Math.max(-4, Math.min(4, star - others));
+  return {
+    ...r,
+    others: others != null ? round4(others) : null,
+    delta: delta != null ? round4(delta) : null,
+  };
+}
+
+// --- 규칙 분류기 v2 ---------------------------------------------------------
+
+const one = (s) => new RegExp(s, "u");
+const all = (s) => new RegExp(s, "gu");
+const C = {
+  split: all(RULES.split),
+  hedge: one(RULES.hedge),
+  override: RULES.override.map(([a, p, s]) => [a, p, one(s), all(s)]),
+  polar: RULES.polar.map(([a, p, s]) => [a, p, one(s), all(s)]),
+  mention: RULES.mention.map(([a, s]) => [a, one(s)]),
+  generic: RULES.generic.map(([p, s]) => [p, one(s), all(s)]),
+};
+
+function classifyClause(clause) {
+  const found = [];
+  let text = clause;
+  for (const [aspect, pol, rx, rxg] of [...C.override, ...C.polar]) {
+    if (rx.test(text)) {
+      text = text.replace(rxg, " ");
+      if (aspect) found.push([aspect, pol]);
+    }
+  }
+  const mentioned = new Set(C.mention.filter(([, rx]) => rx.test(text)).map(([a]) => a));
+  const generic = [];
+  for (const [pol, rx, rxg] of C.generic) {
+    if (rx.test(text)) {
+      text = text.replace(rxg, " ");
+      generic.push(pol);
+    }
+  }
+  const polarAspects = new Set(found.map(([a]) => a));
+  let targets = [...mentioned].filter((a) => !polarAspects.has(a));
+  const out = found.map(([a, p]) => [a, p, false]);
+  if (generic.length) {
+    if (!targets.length && !found.length) targets = ["taste"];
+    for (const a of targets) for (const p of generic) out.push([a, p, true]);
+  }
+  return out;
+}
+
+function merge(votes) {
+  if (!votes.length) return "none";
+  let pos = 0, neg = 0, mixed = 0;
+  for (const [p, w] of votes) {
+    if (p === "pos") pos += w;
+    else if (p === "neg") neg += w;
+    else if (p === "mixed") mixed += w;
+  }
+  if (pos && pos >= 2 * (neg + mixed)) return "pos";
+  if (neg && neg >= 2 * (pos + mixed)) return "neg";
+  return "mixed";
+}
+
+export function classify(text) {
+  const per = Object.fromEntries(ASPECTS.map((a) => [a, []]));
+  const genericTasteNeg = [];
+  let otherNeg = false;
+  for (const clause of (text || "").split(C.split)) {
+    if (!clause.trim()) continue;
+    const weight = C.hedge.test(clause) ? 0.5 : 1.0;
+    const seen = new Set();
+    for (const [aspect, pol, gen] of classifyClause(clause)) {
+      const key = `${aspect}|${pol}|${gen}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const vote = [pol, pol === "neg" ? weight : 1.0];
+      if (aspect === "taste" && pol === "neg" && gen) {
+        genericTasteNeg.push(vote);
+        continue;
+      }
+      if (aspect !== "taste" && pol === "neg" && !gen) otherNeg = true;
+      per[aspect].push(vote);
+    }
+  }
+  // 코드북 규칙 8: 대상 없는 부정어가 맛 이외의 불만과 함께 있으면 그 불만에 대한 말로 읽는다
+  if (!otherNeg) per.taste.push(...genericTasteNeg);
+  return Object.fromEntries(ASPECTS.map((a) => [a, merge(per[a])]));
+}
+
+// score.is_clean 과 같다. 별점을 맛의 근거로 쓸 수 있는가.
+export function isClean(label) {
+  const taste = label.taste;
+  if (taste === "none") return false;
+  const others = NON_TASTE.map((a) => label[a]).filter((v) => v !== "none");
+  if (!others.length) return true;
+  if (taste === "mixed" || others.includes("mixed")) return false;
+  return others.every((o) => o === taste);
+}
+
+// --- 점수 -------------------------------------------------------------------
+
+// 시드를 고정한 난수. 같은 후기 묶음이면 화면을 다시 열어도 구간이 같다.
+export function rng(seed) {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+const mean = (xs) => xs.reduce((s, x) => s + x, 0) / xs.length;
+
+// score.boot_ci 와 같은 백분위 위치. 난수는 달라서 구간 끝은 Python 과 조금 다르다.
+export function bootCi(xs, rand, n = BOOT) {
+  if (!xs.length) return null;
+  const ms = [];
+  for (let i = 0; i < n; i++) {
+    let s = 0;
+    for (let j = 0; j < xs.length; j++) s += xs[Math.floor(rand() * xs.length)];
+    ms.push(s / xs.length);
+  }
+  ms.sort((a, b) => a - b);
+  return [ms[Math.floor(0.025 * n)], ms[Math.floor(0.975 * n) - 1]];
+}
+
+function stat(xs, rand) {
+  return { n: xs.length, value: xs.length ? mean(xs) : null, ci: bootCi(xs, rand), hold: xs.length < MIN_N };
+}
+
+// 가게 하나. reviews 는 fromApi 를 거친 후기 목록(중복 없이).
+// overall = C, 전체 편차(천장 제외). 「맛 점수」 가 아니다 — 본문 없는 후기도 들어가서 맛 편차보다 낮게 나온다.
+// taste   = 규칙 v2 로 맛을 근거로 쓸 수 있는 후기만 남긴 편차. 참고값.
+// showTaste = 둘 다 보류가 아니고 C 가 taste 의 95% 구간 밖일 때만 참고값을 띄운다.
+export function scoreShop(reviews, seed = 0) {
+  const rows = reviews.map(derive);
+  const usable = rows.filter((r) => r.delta != null && r.others < CEILING);
+  const overall = stat(usable.map((r) => r.delta), rng(seed));
+  const clean = usable.filter((r) => isClean(classify(r.text)));
+  const taste = stat(clean.map((r) => r.delta), rng(seed + 1));
+  const showTaste =
+    !overall.hold && !taste.hold && (overall.value < taste.ci[0] || overall.value > taste.ci[1]);
+  return {
+    n: rows.length,
+    n_ceiling: rows.filter((r) => r.delta != null && r.others >= CEILING).length,
+    overall,
+    taste,
+    showTaste,
+  };
+}

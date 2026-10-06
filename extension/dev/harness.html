@@ -1,0 +1,46 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>taste-signal 검사</title>
+<!-- 카카오에 접속하지 않고 hook.js 와 panel.js 를 돌려 보는 페이지. 응답은 지어낸 것이다.
+     python3 -m http.server 8765 --directory extension  후  http://localhost:8765/dev/harness.html -->
+<style>body{font:14px system-ui;margin:16px}button{margin:4px}</style>
+<p>지어낸 응답으로 패널을 확인한다.</p>
+<button id="latest">최신순 20건 불러오기</button>
+<button id="rec">추천순으로 불러오기</button>
+<script>
+  // 확장 환경 흉내: chrome.runtime.getURL 만 있으면 된다
+  window.chrome = { runtime: { getURL: (p) => new URL("../" + p, location.href).href } };
+  const PATH = "/places/tab/reviews/kakaomap/9999";
+  let page = 0;
+  function fake(order) {
+    const reviews = [];
+    for (let i = 0; i < 20; i++) {
+      const k = page * 20 + i;
+      const kind = k % 4; // 맛 칭찬 둘, 응대 불만 하나, 본문 없음 하나
+      reviews.push({
+        review_id: 100000 + k,
+        star_rating: kind === 2 ? 1 : kind === 3 ? 2 : 5,
+        contents: kind < 2 ? "고기가 정말 맛있어요" : kind === 2 ? "직원이 너무 불친절해요" : "",
+        registered_at: "2026-10-01 12:00:00",
+        updated_at: "2026-10-01 12:00:00",
+        meta: { owner: { review_count: 20, average_score: 3.6 } },
+      });
+    }
+    page++;
+    return { reviews, has_next: page < 5, score_set: { review_count: 100, average_score: 3.4 } };
+  }
+  const realFetch = window.fetch;
+  window.fetch = (url, opt) => {
+    const u = new URL(url, location.href);
+    if (u.pathname.startsWith(PATH)) {
+      return Promise.resolve(new Response(JSON.stringify(fake(u.searchParams.get("order"))), { headers: { "content-type": "application/json" } }));
+    }
+    return realFetch(url, opt);
+  };
+</script>
+<script src="../hook.js"></script>
+<script src="../panel.js"></script>
+<script>
+  document.getElementById("latest").onclick = () => fetch(PATH + "?order=LATEST&only_photo_review=false");
+  document.getElementById("rec").onclick = () => { page = 0; fetch(PATH + "?order=RECOMMEND&only_photo_review=false"); };
+</script>

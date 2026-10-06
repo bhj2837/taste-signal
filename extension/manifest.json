@@ -1,0 +1,28 @@
+{
+  "manifest_version": 3,
+  "name": "taste-signal",
+  "version": "0.1.0",
+  "description": "카카오맵 장소 페이지에서 사용자가 펼친 후기만으로 리뷰어 편차를 계산해 보여 준다. 요청을 새로 만들지 않고, 저장하거나 보내지 않는다.",
+  "permissions": [],
+  "content_scripts": [
+    {
+      "matches": ["https://place.map.kakao.com/*"],
+      "js": ["hook.js"],
+      "world": "MAIN",
+      "run_at": "document_start",
+      "all_frames": true
+    },
+    {
+      "matches": ["https://place.map.kakao.com/*"],
+      "js": ["panel.js"],
+      "run_at": "document_idle",
+      "all_frames": true
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["core.js", "rules_v2.js"],
+      "matches": ["https://place.map.kakao.com/*"]
+    }
+  ]
+}
