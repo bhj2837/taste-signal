@@ -1,4 +1,4 @@
-"""규칙 분류기 v0 가 CODEBOOK.md 의 판정 예시를 따르는지. 예시 문장은 지어낸 것이다.
+"""규칙 분류기가 CODEBOOK.md 의 판정 예시를 따르는지. 예시 문장은 지어낸 것이다.
 
 실행: python3 -m unittest
 """
@@ -61,6 +61,38 @@ class Codebook(unittest.TestCase):
 
     def test_empty_text(self):
         self.assertEqual(set(classify("").values()), {"none"})
+
+
+class V2(unittest.TestCase):
+    """v2 에서 고친 오류. 예시 문장은 지어낸 것이다."""
+
+    def test_no_space_praise_is_not_bland(self):
+        # v1 은 「너무맛있」 안의 「무맛」 을 맛 부정으로 잡았다
+        self.assertEqual(pick("고기가 너무맛있어요", "taste"), ("pos",))
+
+    def test_no_off_smell_is_praise(self):
+        self.assertEqual(pick("잡내 하나도 안 나고 부드러워요", "taste"), ("pos",))
+        self.assertEqual(pick("양고기인데 냄새가 전혀 없어요", "taste"), ("pos",))
+
+    def test_feel_is_not_greasy(self):
+        self.assertEqual(pick("캠핑 감성 느끼고 싶으면 오세요 고기도 맛있어요", "taste"), ("pos",))
+
+    def test_not_expensive(self):
+        self.assertEqual(pick("비싸지 않은 가격에 고기도 좋아요", "price"), ("pos",))
+
+    def test_hedged_complaint_counts_half(self):
+        self.assertEqual(pick("정말 맛있었지만 좀 짰어요", "taste"), ("pos",))
+
+    def test_generic_negative_next_to_service_is_not_taste(self):
+        # 코드북 규칙 8
+        self.assertEqual(pick("직원이 너무 불친절해요. 다신 안 갑니다", "taste", "service"), ("none", "neg"))
+        self.assertEqual(pick("불친절하고 맛도 없어요", "taste", "service"), ("neg", "neg"))
+
+    def test_not_worth_eating(self):
+        self.assertEqual(pick("30분 기다려서 먹을 맛은 아니에요", "taste"), ("neg",))
+
+    def test_wait_as_fact_is_not_complaint(self):
+        self.assertEqual(pick("웨이팅이 길었지만 고기가 맛있어요", "taste", "wait"), ("pos", "none"))
 
 
 if __name__ == "__main__":
