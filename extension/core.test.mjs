@@ -75,3 +75,32 @@ test("거르기로 바뀌는 게 없으면 참고값을 띄우지 않는다", ()
   const s = scoreShop([...many(20, 5, "고기가 맛있어요"), ...many(20, 3, "맛은 별로예요")]);
   assert.equal(s.showTaste, false);
 });
+
+// score.py 등급 테스트와 같은 예제(test_score.py Tiers)
+import { tiers, placeInReference, letter } from "./core.js";
+const shop = (name, d, lo, hi) => ({ name, d, se: (hi - lo) / 3.92 });
+
+test("뚜렷한 차이면 새 티어", () => {
+  const out = tiers([shop("a", 0.6, 0.4, 0.8), shop("b", 0.5, 0.3, 0.7), shop("c", 0.0, -0.2, 0.2)]);
+  assert.deepEqual(out.map((r) => r.tier), [1, 1, 2]);
+});
+
+test("구간이 겹쳐도 차이 검정으로 갈린다", () => {
+  const out = tiers([shop("a", 0.8, 0.65, 0.95), shop("b", 0.4, 0.25, 0.55)]);
+  assert.deepEqual(out.map((r) => r.tier), [1, 2]);
+});
+
+test("구간이 넓은 맨 위가 아래를 삼키지 않는다", () => {
+  const out = tiers([shop("a", 1.0, -0.5, 2.5), shop("b", 0.9, 0.8, 1.0), shop("c", 0.6, 0.5, 0.7)]);
+  assert.deepEqual(out.map((r) => r.tier), [1, 1, 2]);
+});
+
+test("기준 분포에 끼워 티어를 매긴다", () => {
+  const ref = { shops: [{ d: 1.0, se: 0.05, exp: 0.8 }, { d: 0.5, se: 0.05, exp: 0.4 }, { d: 0.0, se: 0.05, exp: 0.0 }] };
+  const score = (d) => ({ taste: { hold: false, value: d, ci: [d - 0.1, d + 0.1] } });
+  assert.equal(placeInReference(score(0.98), 0.79, ref).letter, "S");
+  assert.equal(placeInReference(score(0.02), null, ref).letter, "B");
+  assert.equal(placeInReference(score(0.98), -0.5, ref).check, "lower");
+  assert.equal(placeInReference({ taste: { hold: true } }, null, ref), null);
+  assert.equal(letter(7), "D");
+});

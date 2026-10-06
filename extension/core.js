@@ -191,3 +191,61 @@ export function scoreShop(reviews, seed = 0) {
     showTaste,
   };
 }
+
+// --- 티어 ---------------------------------------------------------------------
+// vault 티어표와 같은 규칙(score.tiers): 맛 편차 순으로 놓고, 다음 가게가 지금 묶음의 어느 가게보다든
+// 차이 검정(z > 1.96)으로 확실히 낮으면 새 묶음. 기준 분포는 수집한 가게를 이 파일로 계산한 숫자(reference.js).
+
+export const Z_TIER = 1.96;
+export const EXP_RC = 30; // 경험 많은 손님: 후기 30개 이상
+export const EXP_MIN = 8;
+export const GAP = 0.25; // 경험 많은 손님 백분위가 이만큼 벌어지면 표시
+const LETTER = ["S", "A", "B", "C"];
+export const letter = (tier) => LETTER[tier - 1] || "D";
+
+const seFromCi = (ci) => (ci[1] - ci[0]) / 3.92;
+
+function clearlyLower(a, b) {
+  return (a.d - b.d) / Math.hypot(a.se, b.se) > Z_TIER;
+}
+
+// shops: [{ d, se, ... }]. 같은 배열에 tier 를 적어 돌려준다(맛 편차 내림차순).
+export function tiers(shops) {
+  const ranked = [...shops].sort((x, y) => y.d - x.d);
+  let tier = 0, members = [];
+  for (const r of ranked) {
+    if (!members.length || members.some((m) => clearlyLower(m, r))) {
+      tier += 1;
+      members = [];
+    }
+    members.push(r);
+    r.tier = tier;
+  }
+  return ranked;
+}
+
+// 후기 30개 이상 리뷰어만의 편차(본문으로 거르지 않음, 천장 제외). 만들기 비싼 계정이라 조작에 강하다.
+export function expDelta(reviews) {
+  const xs = reviews.map(derive).filter((r) => r.delta != null && r.others < CEILING && r.rc >= EXP_RC).map((r) => r.delta);
+  return xs.length >= EXP_MIN ? mean(xs) : null;
+}
+
+export const oneOffShare = (reviews) => (reviews.length ? reviews.filter((r) => r.rc === 1).length / reviews.length : null);
+
+const below = (xs, v) => xs.filter((x) => x < v).length / xs.length;
+
+// 보고 있는 가게(score = scoreShop 결과)를 기준 분포 ref 에 끼워 넣어 티어를 매긴다.
+export function placeInReference(score, exp, ref) {
+  if (score.taste.hold) return null;
+  const me = { d: score.taste.value, se: seFromCi(score.taste.ci), me: true };
+  const all = [...ref.shops.map((s) => ({ ...s })), me];
+  tiers(all);
+  const tasteShare = below(ref.shops.map((s) => s.d), me.d);
+  let check = null;
+  if (exp != null) {
+    const both = ref.shops.filter((s) => s.exp != null);
+    const gap = below(both.map((s) => s.exp), exp) - below(both.map((s) => s.d), me.d);
+    check = gap <= -GAP ? "lower" : gap >= GAP ? "higher" : "same";
+  }
+  return { tier: me.tier, letter: letter(me.tier), top: 1 - tasteShare, n: ref.shops.length, check };
+}
