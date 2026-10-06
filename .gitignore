@@ -2,8 +2,7 @@ __pycache__/
 *.pyc
 .venv/
 
-# 후기 본문이 들어가는 파일. 본문은 작성자의 글이라 공개하지 않는다
-data/raw/
-data/reviews.jsonl
+# 수집 데이터는 공개하지 않는다. 이유는 README 5절
+data/
 # reviewer_key 솔트
 .salt
