@@ -128,13 +128,13 @@ def tiers(results):
     return ranked + [r for r in results if r["tier"] is None]
 
 
-def load(labels_path):
+def load(labels_path, reviews=None):
     labels = {}
     for line in labels_path.open(encoding="utf-8"):
         l = json.loads(line)
         labels[l["review_id"]] = l
     by_shop = defaultdict(list)
-    for line in (BASE / "data" / "reviews.jsonl").open(encoding="utf-8"):
+    for line in (reviews or BASE / "data" / "reviews.jsonl").open(encoding="utf-8"):
         r = json.loads(line)
         r["label"] = labels[r["review_id"]]
         by_shop[r["shop"]].append(r)

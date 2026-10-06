@@ -95,5 +95,39 @@ class V2(unittest.TestCase):
         self.assertEqual(pick("웨이팅이 길었지만 고기가 맛있어요", "taste", "wait"), ("pos", "none"))
 
 
+class V3(unittest.TestCase):
+    """v3 에서 고친 오류. 마포 88곳 전부를 개발용으로 썼다. 예시 문장은 지어낸 것이다."""
+
+    def test_comma_list_shares_the_verdict(self):
+        self.assertEqual(pick("맛, 분위기, 가격 다 만족", "taste", "other", "price"), ("pos", "pos", "pos"))
+
+    def test_menu_item_with_food_predicate(self):
+        self.assertEqual(pick("파채가 야무지고 된장찌개가 구수해요", "taste"), ("pos",))
+
+    def test_quality_predicates(self):
+        self.assertEqual(pick("고기 질이 너무 떨어져요", "taste"), ("neg",))
+        self.assertEqual(pick("고기 퀄리티가 확실히 달라요", "taste"), ("pos",))
+        self.assertEqual(pick("소고기가 질겨요", "taste"), ("neg",))
+        self.assertEqual(pick("맛이 너무 없어요", "taste"), ("neg",))
+
+    def test_revisit_intent(self):
+        self.assertEqual(pick("벌써 다섯 번은 넘게 갔어요", "taste"), ("pos",))
+        self.assertEqual(pick("또 먹고 싶어요", "taste"), ("pos",))
+        # 상황 설명과 부정은 재방문 의사가 아니다
+        self.assertEqual(pick("두 번 다시 가고 싶지 않아요", "taste"), ("neg",))
+        self.assertEqual(pick("불판도 자주 갈아 주셨어요", "taste"), ("none",))
+
+    def test_cannot_be_bad_is_praise(self):
+        self.assertEqual(pick("삼겹살에 김치면 맛없을 수 없죠", "taste"), ("pos",))
+
+    def test_taste_changed(self):
+        self.assertEqual(pick("예전엔 자주 왔는데 맛이 변했어요", "taste"), ("neg",))
+        self.assertEqual(pick("올 때마다 맛이 변함없어요", "taste"), ("pos",))
+
+    def test_slang_needs_context(self):
+        self.assertEqual(pick("어쩔 수 없이 고기를 직접 구웠어요", "taste"), ("none",))
+        self.assertEqual(pick("존맛탱탱구리", "taste"), ("pos",))
+
+
 if __name__ == "__main__":
     unittest.main()

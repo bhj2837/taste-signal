@@ -20,9 +20,9 @@ OUT = BASE / "data" / "reviews.jsonl"
 MIN_COUNT = 5
 
 
-def latest_snapshots():
+def latest_snapshots(raw=RAW):
     by_place = {}
-    for path in sorted(RAW.glob("*_*.json")):
+    for path in sorted(raw.glob("*_*.json")):
         place_id = path.name.split("_")[0]
         by_place[place_id] = path  # 파일 이름의 시각 순으로 정렬되어 있어 마지막이 최신
     return [json.loads(p.read_text(encoding="utf-8")) for p in by_place.values()]
@@ -42,10 +42,12 @@ def derive(r):
     }
 
 
-def main():
-    snaps = latest_snapshots()
+def main(argv=()):
+    """인자 없이 돌리면 data/raw -> data/reviews.jsonl. 시험 전용 묶음은 python3 normalize.py data/raw_seongsu data/reviews_seongsu.jsonl"""
+    raw, out = (BASE / argv[0], BASE / argv[1]) if len(argv) == 2 else (RAW, OUT)
+    snaps = latest_snapshots(raw)
     n = 0
-    with OUT.open("w", encoding="utf-8") as fh:
+    with out.open("w", encoding="utf-8") as fh:
         for snap in snaps:
             for r in snap["reviews"]:
                 row = {
@@ -58,8 +60,10 @@ def main():
                 }
                 fh.write(json.dumps(row, ensure_ascii=False) + "\n")
                 n += 1
-    print(f"{n} reviews / {len(snaps)} shops -> {OUT}")
+    print(f"{n} reviews / {len(snaps)} shops -> {out}")
 
 
 if __name__ == "__main__":
-    main()
+    import sys
+
+    main(sys.argv[1:])

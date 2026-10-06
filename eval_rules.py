@@ -7,6 +7,10 @@
   python3 eval_rules.py split                 분할을 만든다(이미 있으면 그대로 둔다)
   python3 eval_rules.py dev  <규칙 레이블>     개발용 가게로 채점
   python3 eval_rules.py test <규칙 레이블>     시험용 가게로 채점. 판마다 한 번만 쓴다
+  python3 eval_rules.py mapo <규칙 레이블>     88곳 전부로 채점. v3 개발용
+  python3 eval_rules.py seongsu <규칙 레이블>  성동 26곳으로 채점. v3 시험용, 판마다 한 번만 쓴다
+
+v3 시험용 성동 26곳은 마포 88곳과 상권이 다르고, 기준 레이블은 data/labels/claude_seongsu.jsonl 이다.
 
 기준 레이블은 data/labels/claude.jsonl 이다. 사람이 처음부터 단 정답이 아니라 LLM 레이블이고,
 검수로 추정한 오류율은 5퍼센트 안팎이다(METHOD.md 6절).
@@ -24,6 +28,7 @@ from validate import spearman
 BASE = Path(__file__).parent
 SPLIT = BASE / "data" / "gold" / "shop_split.json"
 REF = BASE / "data" / "labels" / "claude.jsonl"
+SEONGSU = (BASE / "data" / "reviews_seongsu.jsonl", BASE / "data" / "labels" / "claude_seongsu.jsonl")
 SEED = 20261007
 TEST_SHARE = 1 / 3
 FIRST_ROUND = 11
@@ -55,10 +60,14 @@ def plain(rows):
 
 
 def grade(part, rules_path):
-    split = json.loads(SPLIT.read_text(encoding="utf-8"))
-    shops = set(split[part])
-    ref = {s: rows for s, rows in score.load(REF).items() if s in shops}
-    got = {s: rows for s, rows in score.load(Path(rules_path)).items() if s in shops}
+    reviews, ref_path = SEONGSU if part == "seongsu" else (None, REF)
+    ref = score.load(ref_path, reviews)
+    if part in ("dev", "test"):
+        shops = set(json.loads(SPLIT.read_text(encoding="utf-8"))[part])
+    else:
+        shops = set(ref)
+    ref = {s: rows for s, rows in ref.items() if s in shops}
+    got = {s: rows for s, rows in score.load(Path(rules_path), reviews).items() if s in shops}
 
     rows = [r for rs in ref.values() for r in rs if r["text"].strip()]
     lab = {r["review_id"]: r["label"] for rs in got.values() for r in rs}
@@ -89,7 +98,7 @@ def grade(part, rules_path):
 def main(argv):
     if argv[:1] == ["split"]:
         make_split()
-    elif len(argv) == 2 and argv[0] in ("dev", "test"):
+    elif len(argv) == 2 and argv[0] in ("dev", "test", "mapo", "seongsu"):
         grade(argv[0], argv[1])
     else:
         print(__doc__)
