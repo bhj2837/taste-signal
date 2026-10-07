@@ -76,32 +76,49 @@
     } else {
       const reviews = [...shop.reviews.values()];
       const s = core.scoreShop(reviews);
-      const place = core.placeInReference(s, core.expDelta(reviews), REFERENCE);
+      const cate = document.querySelector(".info_cate");
+      const key = core.groupOf(cate && cate.textContent, REFERENCE);
+      const group = key && REFERENCE.groups[key];
       lines.push(`펼친 후기 ${loaded}건` + (shop.shown ? ` / 전체 ${shop.shown}건` : ""));
-      if (place) {
+      if (!group || group.status === "pending") {
         big.push(lines.length);
-        lines.push(`맛 티어 ${place.letter}`);
-        lines.push(`수집한 고깃집 ${place.n}곳 기준 상위 ${pctText(place.top)}.`);
-        lines.push(`맛 편차 ${fmt(s.taste.value)}  (${ci(s.taste)}, 맛 후기 ${s.taste.n}건)`);
-        lines.push("맛을 말한 후기에서 리뷰어가 평소보다 별을 얼마나 더 줬나. " + reading(s.taste));
-        if (place.check === "lower") lines.push("후기 30개 이상 쓴 손님들은 이보다 낮게 본다.");
-        else if (place.check === "higher") lines.push("후기 30개 이상 쓴 손님들은 이보다 높게 본다.");
-        else if (place.check === "same") lines.push("후기 30개 이상 쓴 손님들도 같은 쪽으로 본다.");
+        lines.push("맛 티어 없음");
+        lines.push("이 업종은 아직 기준으로 삼을 가게를 모으지 않았다.");
+        if (!s.taste.hold) lines.push(`맛 편차 ${fmt(s.taste.value)}  (${ci(s.taste)}, 맛 후기 ${s.taste.n}건). ` + reading(s.taste));
+      } else if (group.status === "unrated") {
+        big.push(lines.length);
+        lines.push("맛 평가 불가");
+        lines.push(`${group.reason}. 그래서 이 업종은 맛만 골라 내지 않고 전체 편차만 보여 준다.`);
+        const where = core.overallInReference(s, group);
+        if (where) lines.push(`전체 편차는 수집한 ${group.name} ${where.n}곳 기준 상위 ${pctText(where.top)}.`);
       } else {
-        big.push(lines.length);
-        lines.push("맛 티어 판단 보류");
-        const k = moreNeeded(s.taste, loaded);
-        lines.push(`맛을 말한 후기 ${s.taste.n}건(15건 필요).` + (k && shop.hasNext ? ` 아래로 내려 약 ${k}건 더 불러오면 계산합니다.` : ""));
+        const place = core.placeInReference(s, core.expDelta(reviews), group);
+        if (place) {
+          big.push(lines.length);
+          lines.push(`맛 티어 ${place.letter}`);
+          lines.push(`수집한 ${group.name} ${place.n}곳 기준 상위 ${pctText(place.top)}.`);
+          lines.push(`맛 편차 ${fmt(s.taste.value)}  (${ci(s.taste)}, 맛 후기 ${s.taste.n}건)`);
+          lines.push("맛을 말한 후기에서 리뷰어가 평소보다 별을 얼마나 더 줬나. " + reading(s.taste));
+          if (place.check === "lower") lines.push("후기 30개 이상 쓴 손님들은 이보다 낮게 본다.");
+          else if (place.check === "higher") lines.push("후기 30개 이상 쓴 손님들은 이보다 높게 본다.");
+          else if (place.check === "same") lines.push("후기 30개 이상 쓴 손님들도 같은 쪽으로 본다.");
+        } else {
+          big.push(lines.length);
+          lines.push("맛 티어 판단 보류");
+          const k = moreNeeded(s.taste, loaded);
+          lines.push(`맛을 말한 후기 ${s.taste.n}건(15건 필요).` + (k && shop.hasNext ? ` 아래로 내려 약 ${k}건 더 불러오면 계산합니다.` : ""));
+        }
       }
       const oneOff = core.oneOffShare(reviews);
-      if (oneOff != null && loaded >= 40 && oneOff >= REFERENCE.oneOffTop10) {
+      const top10 = group ? group.oneOffTop10 : null;
+      if (oneOff != null && top10 != null && loaded >= 40 && oneOff >= top10) {
         lines.push(`후기 1개짜리 계정이 ${pctText(oneOff)}로 많다(수집한 가게 상위 10퍼센트). 판정은 아니다.`);
       }
       if (s.overall.hold) lines.push(`전체 편차(맛 외 포함)는 쓸 수 있는 후기 ${s.overall.n}건이라 보류.`);
       else lines.push(`전체 편차(맛 외 포함) ${fmt(s.overall.value)}  (${ci(s.overall)}, ${s.overall.n}건)`);
       if (s.n_ceiling) lines.push(`평소 4.8점 이상 주는 리뷰어의 후기 ${s.n_ceiling}건은 뺐다.`);
     }
-    lines.push("이 화면에서 펼친 후기만으로 계산했다. 저장하거나 보내지 않는다. 맛 후기는 규칙으로 가려서 10에서 15퍼센트는 잘못 걸러진다.");
+    lines.push("이 화면에서 펼친 후기만으로 계산했다. 저장하거나 보내지 않는다. 맛 후기는 규칙으로 가려서 고깃집 기준 10에서 15퍼센트는 잘못 걸러진다.");
     host.shadowRoot.innerHTML =
       `<style>div{font:13px/1.5 system-ui,sans-serif;color:#111;background:#fff;border:1px solid #999;` +
       `padding:10px 12px;border-radius:6px}p{margin:0 0 4px}p.big{font-size:18px;font-weight:600;margin:4px 0}` +

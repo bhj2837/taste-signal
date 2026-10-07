@@ -77,7 +77,7 @@ test("거르기로 바뀌는 게 없으면 참고값을 띄우지 않는다", ()
 });
 
 // score.py 등급 테스트와 같은 예제(test_score.py Tiers)
-import { tiers, placeInReference, letter } from "./core.js";
+import { tiers, placeInReference, letter, overallInReference, groupOf } from "./core.js";
 const shop = (name, d, lo, hi) => ({ name, d, se: (hi - lo) / 3.92 });
 
 test("뚜렷한 차이면 새 티어", () => {
@@ -103,4 +103,22 @@ test("기준 분포에 끼워 티어를 매긴다", () => {
   assert.equal(placeInReference(score(0.98), -0.5, ref).check, "lower");
   assert.equal(placeInReference({ taste: { hold: true } }, null, ref), null);
   assert.equal(letter(7), "D");
+});
+
+test("맛 편차가 없는 기준 가게는 티어에서 빠진다", () => {
+  const ref = { shops: [{ d: 1.0, se: 0.05, exp: null, c: 0.5 }, { d: null, se: null, exp: null, c: 0.0 }] };
+  const p = placeInReference({ taste: { hold: false, value: 0.98, ci: [0.88, 1.08] } }, null, ref);
+  assert.equal(p.n, 1);
+});
+
+test("맛 평가 불가 업종은 전체 편차 위치만", () => {
+  const ref = { shops: [{ c: 0.5 }, { c: 0.1 }, { c: -0.3 }, { c: -0.8 }] };
+  assert.equal(overallInReference({ overall: { hold: false, value: 0.2 } }, ref).top, 0.25); // 넷 중 셋이 아래
+  assert.equal(overallInReference({ overall: { hold: true } }, ref), null);
+});
+
+test("업종 이름을 묶음으로", () => {
+  const reference = { categories: { "돈까스,우동": "jp", 삼겹살: "meat" } };
+  assert.equal(groupOf("장소 카테고리돈까스,우동", reference), "jp");
+  assert.equal(groupOf("국밥", reference), null);
 });

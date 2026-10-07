@@ -237,15 +237,29 @@ const below = (xs, v) => xs.filter((x) => x < v).length / xs.length;
 // 보고 있는 가게(score = scoreShop 결과)를 기준 분포 ref 에 끼워 넣어 티어를 매긴다.
 export function placeInReference(score, exp, ref) {
   if (score.taste.hold) return null;
+  const rated = ref.shops.filter((s) => s.d != null);
   const me = { d: score.taste.value, se: seFromCi(score.taste.ci), me: true };
-  const all = [...ref.shops.map((s) => ({ ...s })), me];
+  const all = [...rated.map((s) => ({ ...s })), me];
   tiers(all);
-  const tasteShare = below(ref.shops.map((s) => s.d), me.d);
+  const tasteShare = below(rated.map((s) => s.d), me.d);
   let check = null;
   if (exp != null) {
-    const both = ref.shops.filter((s) => s.exp != null);
+    const both = rated.filter((s) => s.exp != null);
     const gap = below(both.map((s) => s.exp), exp) - below(both.map((s) => s.d), me.d);
     check = gap <= -GAP ? "lower" : gap >= GAP ? "higher" : "same";
   }
-  return { tier: me.tier, letter: letter(me.tier), top: 1 - tasteShare, n: ref.shops.length, check };
+  return { tier: me.tier, letter: letter(me.tier), top: 1 - tasteShare, n: rated.length, check };
+}
+
+// 전체 편차가 그 업종 기준 분포에서 상위 몇 퍼센트인가. 맛 평가 불가 업종에서 쓴다.
+export function overallInReference(score, ref) {
+  if (score.overall.hold) return null;
+  const cs = ref.shops.map((s) => s.c);
+  return { top: 1 - below(cs, score.overall.value), n: cs.length };
+}
+
+// 페이지의 업종 이름(예: "돈까스,우동")을 묶음 열쇠로. 모르면 null.
+export function groupOf(category, reference) {
+  const name = (category || "").replace(/^장소 카테고리/, "").trim();
+  return reference.categories[name] || null;
 }

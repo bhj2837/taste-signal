@@ -7,6 +7,8 @@
 <p>지어낸 응답으로 패널을 확인한다.</p>
 <button id="latest">최신순 20건 불러오기</button>
 <button id="rec">추천순으로 불러오기</button>
+<p>업종: <span class="info_cate"><span>장소 카테고리</span>삼겹살</span>
+  <button data-c="삼겹살">삼겹살</button> <button data-c="돈까스,우동">돈까스,우동</button> <button data-c="국밥">국밥</button></p>
 <script>
   // 확장 환경 흉내: chrome.runtime.getURL 만 있으면 된다
   window.chrome = { runtime: { getURL: (p) => new URL("../" + p, location.href).href } };
@@ -42,5 +44,9 @@
 <script src="../panel.js"></script>
 <script>
   document.getElementById("latest").onclick = () => fetch(PATH + "?order=LATEST&only_photo_review=false");
+  for (const b of document.querySelectorAll("button[data-c]")) b.onclick = () => {
+    document.querySelector(".info_cate").lastChild.textContent = b.dataset.c;
+    page = 0; fetch(PATH + "?order=LATEST&only_photo_review=false&r=" + Math.random());
+  };
   document.getElementById("rec").onclick = () => { page = 0; fetch(PATH + "?order=RECOMMEND&only_photo_review=false"); };
 </script>

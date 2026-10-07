@@ -1,6 +1,8 @@
 """티어표. 맛 편차 등급을 정렬 기준으로 쓰고, 다른 지표는 표시만 한다.
 
   python3 tier_table.py [레이블 파일] [후기 파일]  >  표.md
+  python3 tier_table.py <레이블 파일> <후기 파일> --unrated "이유"  >  표.md
+      규칙 분류기 검증을 넘지 못한 업종. 등급 없이 전체 편차 순으로만 놓는다
 
 가게 이름이 들어간 표를 만든다. 결과는 저장소에 넣지 않는다(README 5절).
 
@@ -53,7 +55,33 @@ def text_rate(rows, aspect):
     return sum(r["label"][aspect] == "neg" for r in t) / len(t) if t else 0.0
 
 
+def unrated(by, reason):
+    """맛 평가 불가 업종. 등급 없이 전체 편차(천장 제외) 순으로 놓는다. 맛 편차는 쓰지 않는다."""
+    rows = []
+    for s, rs in by.items():
+        xs = [r["delta"] for r in rs if r["delta"] is not None and r["others"] < score.CEILING]
+        if len(xs) < score.MIN_CLEAN:
+            continue
+        lo, hi = score.boot_ci(xs, mean, random.Random(0))
+        rows.append((mean(xs), lo, hi, len(xs), s, mean(r["star"] for r in rs), len(rs), exp_delta(rs),
+                     sum(r["rc"] == 1 for r in rs) / len(rs)))
+    print(f"맛 평가 불가: {reason}")
+    print()
+    print("| 가게 | 전체 편차 | 95% 구간 | 쓸 수 있는 후기 | 경험 많은 손님 | 일회성 계정 | 카카오 평균 |")
+    print("|---|---|---|---|---|---|---|")
+    for c, lo, hi, n, s, raw, nn, ex, one in sorted(rows, reverse=True):
+        e = f"{ex:+.2f}" if ex is not None else "-"
+        print(f"| {s} | {c:+.2f} | {lo:+.2f} ~ {hi:+.2f} | {n} | {e} | {one:.0%} | {raw:.1f} ({nn}) |")
+    print()
+    print(f"전체 편차 보류(쓸 수 있는 후기 {score.MIN_CLEAN}건 미만) {len(by) - len(rows)}곳")
+
+
 def main(argv):
+    if "--unrated" in argv:
+        i = argv.index("--unrated")
+        reason, argv = argv[i + 1], argv[:i] + argv[i + 2:]
+        unrated(score.load(Path(argv[0]), Path(argv[1])), reason)
+        return
     labels = Path(argv[0]) if argv else BASE / "data" / "labels" / "claude.jsonl"
     reviews = Path(argv[1]) if len(argv) > 1 else None
     by = score.load(labels, reviews)
