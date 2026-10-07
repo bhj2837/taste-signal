@@ -112,5 +112,80 @@ def main(argv):
     print(f"\n맛 편차(LLM) - 원평균, Y1 상관 차이 {d0:+.2f}  [{diffs[int(.025 * BOOT)]:+.2f}, {diffs[int(.975 * BOOT) - 1]:+.2f}]")
 
 
+# --- 2차: 서울 고깃집(마포, 성동 제외). 사전 등록 2026-10-06, 수집 전 -------------------------------------
+# LLM 레이블 없이 규칙 v2 고정본(커밋 41666b4)만 쓴다. 1차에서 규칙 v2 와 LLM 레이블의 미래 예측력이 같았다.
+# 결과(10월 7일): 대상 125곳, H1 H2 H3 모두 서지 않았다(METHOD.md 7절).
+#   python3 backtest.py --seoul [T]
+SEOUL = ("data/reviews_seoul.jsonl", "data/labels/rules_seoul_v2.jsonl")
+
+
+def label_seoul():
+    out = BASE / SEOUL[1]
+    if out.exists():
+        return
+    sys.path.insert(0, str(BASE / "extension"))
+    from gen_rules import load_v2
+    v2 = load_v2()
+    with out.open("w", encoding="utf-8") as fh:
+        for r in read(SEOUL[0]):
+            fh.write(json.dumps({"review_id": r["review_id"], **v2.classify(r["text"])}, ensure_ascii=False) + "\n")
+
+
+def load_seoul():
+    label_seoul()
+    rules = {x["review_id"]: x for x in read(SEOUL[1])}
+    by = {}
+    for r in read(SEOUL[0]):
+        r["rules"] = rules[r["review_id"]]
+        by.setdefault(r["place_id"], []).append(r)
+    return list(by.values())
+
+
+def measure_seoul(shops, t):
+    rows = []
+    for rs in shops:
+        pre = [r for r in rs if datetime.fromisoformat(r["registered_at"]) < t]
+        post = [r for r in rs if datetime.fromisoformat(r["registered_at"]) >= t and usable(r)]
+        pre_clean = [r["delta"] for r in pre if usable(r) and score.is_clean(r["rules"])]
+        if len(pre_clean) < MIN_PRE or len(post) < MIN_POST:
+            continue
+        exp = [r["delta"] for r in pre if usable(r) and r["rc"] >= EXP_RC]
+        rows.append({
+            "맛 편차 (규칙 v2)": avg(pre_clean),
+            "전체 편차": avg([r["delta"] for r in pre if usable(r)]),
+            "원평균 별점": avg([r["star"] for r in pre]),
+            "경험 많은 손님 편차": avg(exp) if len(exp) >= 8 else None,
+            "Y1": avg([r["delta"] for r in post]),
+        })
+    return rows
+
+
+def diff_ci(rows, x, base="원평균 별점", y="Y1"):
+    """같은 가게 재표본에서 잰 상관 차이. x 가 정의된 가게만 쓴다."""
+    rs = [r for r in rows if r[x] is not None]
+    d0 = spearman([r[x] for r in rs], [r[y] for r in rs]) - spearman([r[base] for r in rs], [r[y] for r in rs])
+    rng, ds = random.Random(2), []
+    for _ in range(BOOT):
+        s = rng.choices(rs, k=len(rs))
+        ds.append(spearman([r[x] for r in s], [r[y] for r in s]) - spearman([r[base] for r in s], [r[y] for r in s]))
+    ds.sort()
+    return d0, ds[int(.025 * BOOT)], ds[int(.975 * BOOT) - 1], len(rs)
+
+
+def main_seoul(argv):
+    t = datetime.fromisoformat(argv[0] if argv else "2025-04-06")
+    rows = measure_seoul(load_seoul(), t)
+    print(f"서울(마포, 성동 제외) T = {t.date()}, 가게 {len(rows)}곳")
+    for x in ("맛 편차 (규칙 v2)", "전체 편차", "원평균 별점", "경험 많은 손님 편차"):
+        r, n = rho(rows, x, "Y1")
+        print(f"  {x:<14} {r:+.2f}  {n}곳")
+    for h, x in (("H1", "경험 많은 손님 편차"), ("H2", "전체 편차"), ("H3", "맛 편차 (규칙 v2)")):
+        d, lo, hi, n = diff_ci(rows, x)
+        print(f"{h} {x} - 원평균: {d:+.2f}  [{lo:+.2f}, {hi:+.2f}]  {n}곳  {'선다' if lo > 0 else '서지 않는다'}")
+
+
 if __name__ == "__main__":
-    main(sys.argv[1:])
+    if sys.argv[1:2] == ["--seoul"]:
+        main_seoul(sys.argv[2:])
+    else:
+        main(sys.argv[1:])
